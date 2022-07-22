@@ -1,11 +1,6 @@
 <script lang="ts">
-	import Foo from '$lib/components/foo.svelte';
-	import type { PitchSettings } from '$lib/stores/pitch';
+	import type { PitchSettings } from '../lib/stores/pitch';
 	import { Imm, object2, object4 } from '../lib/lens';
-	import * as F from 'rusty';
-
-	console.log(F);
-	window.F = F;
 
 	interface Store {
 		ctx?: AudioContext;
@@ -41,6 +36,10 @@
 		}
 	};
 
+	async function onMessage({ type, data }: { type: string; data: unknown }) {
+		console.log('main', type, data);
+	}
+
 	async function onPlay() {
 		async function setup() {
 			const ctx = new AudioContext();
@@ -52,31 +51,21 @@
 			mainGainNode.connect(ctx.destination);
 			mainGainNode.gain.value = 0.1;
 
-			await ctx.audioWorklet.addModule('worklet/wavegen.js');
-			const wavegenNode = new AudioWorkletNode(ctx, 'wavegen');
+			await ctx.audioWorklet.addModule('worklet/WasmProcessor.js');
+			const wavegenNode = new AudioWorkletNode(ctx, 'WasmProcessor');
 			wavegenNode.connect(mainGainNode);
 			store.state.port = wavegenNode.port;
+			store.state.port!.onmessage = (e) => onMessage(e.data);
 
 			store = Imm.set(stateIsPlaying, true, store);
-			store.state.port!.postMessage(store.settings);
+			store.state.port!.postMessage({ type: 'settings', data: store.settings });
+
+			fetch('.wasm/wasm_bg.wasm')
+				.then((r) => r.arrayBuffer())
+				.then((r) => wavegenNode.port.postMessage({ type: 'loadWasm', data: r }));
 		}
 
-		// function playTone(frequency: number) {
-		// 	const { ctx, mainGainNode } = store;
-		// 	if (!ctx || !mainGainNode) {
-		// 		return;
-		// 	}
-		// 	const osc = ctx.createOscillator();
-		// 	osc.connect(mainGainNode);
-		// 	osc.frequency.value = frequency;
-		// 	osc.start();
-		// 	osc.stop(0.5);
-		// 	return osc;
-		// }
-
 		await setup();
-
-		// playTone(pitchFrequency(store.settings.pitch, 69));
 	}
 
 	async function onStop() {
@@ -94,6 +83,10 @@
 			store.state.port?.postMessage(store.settings);
 		};
 	}
+
+	function capitalized(x: string) {
+		return x[0].toUpperCase() + x.slice(1);
+	}
 </script>
 
 <h1>Music Thingy</h1>
@@ -103,18 +96,21 @@
 {:else}
 	<button on:click={onPlay}>Play</button>
 {/if}
-<h2>Settings</h2>
 {#each Object.entries(store.settings) as [settingName, setting]}
-	<h3>{settingName}</h3>
-	{#each Object.entries(setting) as [n0, v0]}
-		{#if typeof v0 === 'object'}
-			{#each Object.entries(v0) as [n1, value]}
-				<div>{n0} {n1}: <input {value} on:change={updateSetting([settingName, n0, n1])} /></div>
-			{/each}
-		{:else}
-			<div>{n0}: <input value={v0} /></div>
-		{/if}
-	{/each}
+	<h2>{capitalized(settingName)}</h2>
+	<ul>
+		{#each Object.entries(setting) as [n0, v0]}
+			<li>
+				<div>{capitalized(n0)}</div>
+				<ul>
+					{#each Object.entries(v0) as [n1, value]}
+						<li>
+							{capitalized(n1)}
+							<input {value} on:change={updateSetting([settingName, n0, n1])} />
+						</li>
+					{/each}
+				</ul>
+			</li>
+		{/each}
+	</ul>
 {/each}
-
-<Foo />
