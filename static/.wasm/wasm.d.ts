@@ -1,22 +1,26 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
-* @param {number} size
+* @param {number} sample_rate
+* @param {number} buffer_size
 * @returns {number}
 */
-export function buffer_alloc(size: number): number;
+export function initialize(sample_rate: number, buffer_size: number): number;
 /**
-* @param {number} out_ptr
-* @param {number} sample_count
 */
-export function process(out_ptr: number, sample_count: number): void;
+export function process(): void;
+/**
+* @returns {any}
+*/
+export function getSettings(): any;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly buffer_alloc: (a: number) => number;
-  readonly process: (a: number, b: number) => void;
+  readonly initialize: (a: number, b: number) => number;
+  readonly process: () => void;
+  readonly getSettings: () => number;
 }
 
 /**

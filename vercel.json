@@ -1,0 +1,7 @@
+{
+	"github": {
+        // TODO: run gh action instead so we can run wasm-pack in CD
+        // DOCS: https://vercel.com/support/articles/how-can-i-use-github-actions-with-vercel
+		// "enabled": false
+	}
+}

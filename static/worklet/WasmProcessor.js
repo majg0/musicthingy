@@ -1,7 +1,5 @@
-/* global currentFrame:readonly */
-
 import './TextEncoder.js';
-import init, { buffer_alloc, process } from '../.wasm/wasm.js';
+import loadWasm, { initialize, process, getSettings } from '../.wasm/wasm.js';
 
 // function logN(n, value) {
 // 	return Math.log(value) / Math.log(n);
@@ -20,11 +18,10 @@ import init, { buffer_alloc, process } from '../.wasm/wasm.js';
 // 	);
 // }
 
-const SAMPLE_BUFSIZE = 128;
+const BUFFER_SIZE = 128;
 
 class WasmProcessor extends AudioWorkletProcessor {
 	#wasm;
-	#settings;
 	#ptr;
 	#buf;
 
@@ -36,16 +33,22 @@ class WasmProcessor extends AudioWorkletProcessor {
 
 	async onmessage({ type, data }) {
 		console.log('wasm', type, data);
-		if (type === 'settings') {
-			this.#settings = data;
-		} else if (type === 'loadWasm') {
-			this.#wasm = await init(WebAssembly.compile(data));
+		if (type === 'loadWasm') {
+			const { wasmBytes, sampleRate } = data;
 
-			this.#ptr = buffer_alloc(SAMPLE_BUFSIZE);
-			this.#buf = new Float32Array(this.#wasm.memory.buffer, this.#ptr, SAMPLE_BUFSIZE);
+			this.#wasm = await loadWasm(WebAssembly.compile(wasmBytes));
 
-			console.log(this.#wasm, this.#ptr, this.#buf);
-			this.port.postMessage({ type: 'wasmLoaded' });
+			this.#ptr = initialize(sampleRate, BUFFER_SIZE);
+			this.#buf = new Float32Array(this.#wasm.memory.buffer, this.#ptr, BUFFER_SIZE);
+
+			const settings = getSettings();
+			console.log(settings);
+			// this.mapping = Object.keys(settings.number).reduce((o, k, i) => o.set(k, i), new Map());
+
+			this.port.postMessage({ type: 'wasmLoaded', data: settings });
+		} else if (type === 'setNumber') {
+			// const { key, value } = data;
+			// setNumber(this.mapping.get(key), value);
 		}
 	}
 
@@ -54,23 +57,13 @@ class WasmProcessor extends AudioWorkletProcessor {
 			return true;
 		}
 
-		process(this.#ptr, SAMPLE_BUFSIZE);
-		// const {
-		// 	scale: { range, subdivisions },
-		// 	standard: { frequency, pitchIndex }
-		// } = this.settings.pitch;
+		process();
 
-		// output.forEach((channel) => {
-		// 	for (let i = 0; i < channel.length; i++) {
-		// 		this.phase += pitchFrequency(this.settings.pitch, 69) / 44100;
-		// 		if (this.phase >= 1) {
-		// 			this.phase -= 1;
-		// 		}
-
-		// 		channel[i] = Math.sin(this.phase * Math.PI * 2);
-		// 		// channel[i] = Math.random() * 2 - 1;
-		// 	}
-		// });
+		// NOTE: handle wasm memory growth
+		// DOCS: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Memory/grow#detachment_upon_growing
+		if (this.#buf.byteLength === 0) {
+			this.#buf = new Float32Array(this.#wasm.memory.buffer, this.#ptr, BUFFER_SIZE);
+		}
 
 		for (let i = 0; i < outputs.length; i++) {
 			for (let ch = 0; ch < outputs[i].length; ch++) {
